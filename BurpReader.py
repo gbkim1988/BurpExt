@@ -93,19 +93,28 @@ class BurpReader:
 
 def test():
     print()
-    BRbase = BurpReader(fn="D:\\pyWorkspaces\\AllForU\\burp_history.xml")
+    BRbase = BurpReader(fn="log/log_20170211.xml")
     BRbase.connect_to_file()
     item = BRbase.pop_item()
-    BI = BurpItem(item)
+    #BI = BurpItem(item)
     #print(BI.domain)
     #print(BI.response)
     #print(BI.request)
+    item = BRbase.get_item(61)
+    #bi = BurpItem(item)
+    #print(bi.request)
+
     while BRbase.item_counter < BRbase.item_number:
-        print(BRbase.item_counter)
+        #print(BRbase.item_counter)
         item = BRbase.pop_item()
         BI = BurpItem(item)
-        print(BI.params)
-        print(BI.headers)
+        #BI.params
+        for x in BI.headers.keys():
+            if x.lower().find('get') > -1:
+                print (BRbase.item_counter)
+                print (BI.url)
+                print (x)
+                print (BI.headers[x])
 
     """
     print(BRbase.get_item(2))

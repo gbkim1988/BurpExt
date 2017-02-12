@@ -71,14 +71,15 @@ class BurpItem:
     @property
     def cookies(self):
         if self.__cookies == None:
-            if self.__request != None:
-                header = self.__request.split(BurpItem.SEP)
-                if len(header) <= 2 and header[0] != '':
+            if self.__headers != None:
+                if 'cookie' in [x.lower() for x in self.__headers.keys() ]:
                     self.__cookies = dict()
-                    for x in header[0].split(BurpItem.LF):
-                        splited = x.split(':')
-                        if len(splited) == 2:
-                            self.__cookies[splited[0]] = splited[1]
+                    cook = self.__headers['Cookie']
+                    splited = cook.split(';')
+                    for x in splited:
+                        xi = x.split('=')
+                        if len(xi) >= 2:
+                            self.__cookies[xi[0]] = ''.join(xi[1:])
         else:
             return self.__cookies
 
@@ -89,9 +90,11 @@ class BurpItem:
                 header = self.__request.split(BurpItem.SEP)
                 if len(header) <= 2 and header[0] != '':
                     self.__headers = dict()
-                    for x in header[0].split(BurpItem.LF):
+                    #print(header[0].split(BurpItem.LF))
+                    for x in header[0].split(BurpItem.LF)[1:]:
                         splited = x.split(':')
                         if len(splited) == 2:
+                            #print(splited)
                             self.__headers[splited[0]] = splited[1]
         else:
             return self.__headers

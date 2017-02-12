@@ -9,9 +9,11 @@
 # Licence:     <your licence>
 #-------------------------------------------------------------------------------
 
-from BurpExt.BurpReader import BurpReader
-from BurpExt.BurpItems import BurpItem
-from BurpExt.SqlConnector import BurpMysqlConnector
+from BurpReader import BurpReader
+from BurpItems import BurpItem
+from SqlConnector import BurpMysqlConnector
+import tqdm
+import time
 
 class BurpLogger(object):
     '''
@@ -29,16 +31,52 @@ class BurpLogger(object):
         self.__reader.connect_to_file()
 
     def logging(self):
-        while self.reader.item_counter != self.reader.item_number:
+        #while self.reader.item_counter != self.reader.item_number:
+        print("** Logging Process Activated (DO NOT INTERRUPT IT")
+        for i in tqdm.tqdm(range(self.reader.item_counter,self.reader.item_number,1)):
+            time.sleep(0.01)
             bi = BurpItem(self.reader.pop_item())
             do_no = self.insert_to_domain_tb(bi)
-            #break # insert one item for test
+            self.insert_to_header_tb(bi, do_no)
 
         pass
+
     def insert_to_header_tb(self, bitem, do_no):
-        (header, param) = bitem.request.split(BurpLogger.SEP)
-        header
-        self.connector.insert(BurpDataSet.INSERT_HEADER_TB['field'], BurpDataSet.INSERT_HEADER_TB['table'], [do_no, bitem.domain, bitem.ip, bitem.port])
+        # INSERT_HEADER_TB = {'field': ['header_no', 'domain_no', 'header_name'], 'table':'header_table'}
+        if isinstance(bitem.headers, dict):
+            for header in bitem.headers.keys():
+                rows = self.connector.query(BurpDataSet.INSERT_HEADER_TB['field'], BurpDataSet.INSERT_HEADER_TB['table'], where="header_name = '{}'".format(header))
+                if len(rows) == 0: # there is no history about registering header_name
+                    x = self.connector.query(BurpDataSet.INSERT_HEADER_TB['field'], BurpDataSet.INSERT_HEADER_TB['table'])
+                    xi = BurpDataSet.INSERT_HEADER_TB['field'].index('header_no')
+                    before = 1000 # at least, domain number start from 1000
+                    for xii in x:
+                        before = max(before, xii[xi])
+                    header_no = before
+                    header_no += 1
+                    self.connector.insert(BurpDataSet.INSERT_HEADER_TB['field'],
+                        BurpDataSet.INSERT_HEADER_TB['table'],
+                        [header_no, do_no, header])
+                    self.insert_to_head_tb(header_no, bitem.headers[header])
+                else: # there is history
+                    rows = self.connector.query(BurpDataSet.INSERT_HEADER_TB['field'],
+                    BurpDataSet.INSERT_HEADER_TB['table'],
+                    where="header_name = '{}'".format(header))
+                    x = BurpDataSet.INSERT_HEADER_TB['field'].index('header_no')
+                    header_no = None
+                    before = 1000
+                    for row in rows:
+                        before = max(before, row[x])
+                    header_no = before
+                    self.insert_to_head_tb(header_no, bitem.headers[header])
+                    pass
+
+    def insert_to_head_tb(self, he_no, value):
+        # INSERT_HEAD_TB = {'field': ['head_no', 'header_no', 'head_value'], 'table':'head_table'}
+        self.connector.insert(BurpDataSet.INSERT_HEAD_TB['field'],
+                        BurpDataSet.INSERT_HEAD_TB['table'],
+                        [he_no, value])
+        pass
 
     def insert_to_domain_tb(self, bitem):
         ''' constraints :
@@ -49,22 +87,21 @@ class BurpLogger(object):
 
         rows = self.connector.query(BurpDataSet.INSERT_DOMAIN_TB['field'], BurpDataSet.INSERT_DOMAIN_TB['table'], where="domain = '{}'".format(bitem.domain))
 
-        if len(rows) == 0:
+        if len(rows) == 0: # if domain_name isn't included in database
             x = self.connector.query(BurpDataSet.INSERT_DOMAIN_TB['field'], BurpDataSet.INSERT_DOMAIN_TB['table'])
             xi = BurpDataSet.INSERT_DOMAIN_TB['field'].index('domain_no')
-            before = -1
+            before = 1000 # at least, domain number start from 1000
             for xii in x:
                 before = max(before, xii[xi])
             do_no = before
             do_no += 1
             self.connector.insert(BurpDataSet.INSERT_DOMAIN_TB['field'], BurpDataSet.INSERT_DOMAIN_TB['table'], [do_no, bitem.domain, bitem.ip, bitem.port])
-        else:
+        else: # if domain_name is included in database, then just return domain_no
             x = BurpDataSet.INSERT_DOMAIN_TB['field'].index('domain_no')
-            before = 10000
+            before = 1000
             for row in rows:
-                before = min(before, row[x])
+                before = max(before, row[x])
             do_no = before
-
         return do_no
     @property
     def reader(self):
@@ -83,13 +120,15 @@ class BurpDataSet:
     INSERT_DOMAIN_TB = {'field': ['domain_no', 'domain', 'ip', 'port'], 'table':'domain_table'}
 
     INSERT_HEADER_TB = {'field': ['header_no', 'domain_no', 'header_name'], 'table':'header_table'}
-    INSERT_HEAD_TB = {'field': ['head_no', 'header_no', 'head_value'], 'table':'head_table'}
+
+    INSERT_HEAD_TB = {'field': ['header_no', 'head_value'], 'table':'head_table'}
+    SELECT_HEAD_TB = {'field': ['head_no', 'header_no', 'head_value'], 'table':'head_table'}
 
     INSERT_PARAM_TB = {'field': ['param_no', 'domain_no', 'param_name'], 'table':'param_table'}
     INSERT_CASE_TB = {'field': ['case_no', 'param_no', 'case_value', 'param_type', 'param_ntype'], 'table':'case_table'}
 
     INSERT_REQ_TB = {'field': ['req_no', 'domain_no', 'url_no', 'headers', 'parameters'], 'table':'request_table'}
-    INSERT_RES_TB = {'field': ['res_no', 'req_no', 'status', 'length', 'response'], 'table':'response_table'}
+    INSERT_RES_TB = {'field': ['res_no', 'req_no', 'status', 'length', 'header' ,'response'], 'table':'response_table'}
 
     INSERT_SESS_TB = {'field': ['sess_no', 'domain_no', 'sess_name'], 'table':'session_table'}
     INSERT_SESS_CASE_TB = {'field': ['sess_case_no', 'sess_no', 'sess_value'], 'table':'sess_case_table'}
@@ -105,13 +144,14 @@ class BurpDataSet:
     PARAM_TYPE_BIN = 'BINARY'
 
 def main():
-    BR = BurpReader("D:\\pyWorkspaces\\AllForU\\burp_history.xml")
+    BR = BurpReader("log/log_20170211.xml")
     bmc = BurpMysqlConnector(host='127.0.0.1',
                             port=3306,
-                            user='root',
+                            user='kimcert',
                             passwd='1234',
-                            db='burp_records',
+                            db='burpdb',
                             charset ='utf8')
+
     BP = BurpLogger(reader=BR, conn=bmc)
 
     BP.logging()
